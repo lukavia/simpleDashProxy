@@ -27,14 +27,14 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 opener = urllib.request.build_opener(NoRedirect)
 urllib.request.install_opener(opener)
 
-c = shared_memory.SharedMemory(name='simpleProxyDownloader', create=True, size=10)
+c = shared_memory.SharedMemory(name='simpleDashProxyDownloader', create=True, size=10)
 
 def start_download(url, output_dir):
     d = DashProxy(mpd=url, output_dir=output_dir, download=True, bandwidth_limit=4000000)
     d.run()
 
-class simpleProxy(http.server.SimpleHTTPRequestHandler):
-    server_version = "simpleProxy"
+class simpleDashProxy(http.server.SimpleHTTPRequestHandler):
+    server_version = "simpleDashProxy"
     def do_GET(self):
         res = self.do_request(method='GET')
         if isinstance(res, http.client.HTTPResponse) and res.status == 200:
@@ -73,7 +73,7 @@ class simpleProxy(http.server.SimpleHTTPRequestHandler):
         path = path + self.transform_path(url)
 
         if method == 'GET' and os.path.basename(path) == 'manifest.mpd':
-            c = shared_memory.SharedMemory(name='simpleProxyDownloader')
+            c = shared_memory.SharedMemory(name='simpleDashProxyDownloader')
             pid = int.from_bytes(c.buf, sys.byteorder)
             if pid and psutil.pid_exists(pid):
                 pr = psutil.Process(pid)
@@ -125,7 +125,7 @@ class simpleProxy(http.server.SimpleHTTPRequestHandler):
 if __name__ == '__main__':
     PORT = 8088
 
-    httpd = socketserver.ForkingTCPServer(('', PORT), simpleProxy)
+    httpd = socketserver.ForkingTCPServer(('', PORT), simpleDashProxy)
     print ("Now serving at", str(PORT))
     httpd.serve_forever()
     c.unlink()
