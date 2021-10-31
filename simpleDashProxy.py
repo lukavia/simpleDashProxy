@@ -1,11 +1,23 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S python3 -u
+import os
+import sys
+import signal
+from multiprocessing import Process, shared_memory
+import time
+import psutil
+
 import socketserver
 import http.server
 import urllib.request
 import urllib.error
 import urllib.parse
 import re
-import os.path
+
+from dashproxy.dashproxy import DashProxy
+import logging
+
+logger = logging.getLogger('dash-proxy')
+logger.setLevel(logging.INFO)
 
 # Do not follow redirect just return whatever the other server returns
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -14,6 +26,12 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 opener = urllib.request.build_opener(NoRedirect)
 urllib.request.install_opener(opener)
+
+c = shared_memory.SharedMemory(name='simpleProxyDownloader', create=True, size=10)
+
+def start_download(url, output_dir):
+    d = DashProxy(mpd=url, output_dir=output_dir, download=True, bandwidth_limit=4000000)
+    d.run()
 
 class simpleProxy(http.server.SimpleHTTPRequestHandler):
     server_version = "simpleProxy"
@@ -54,6 +72,29 @@ class simpleProxy(http.server.SimpleHTTPRequestHandler):
         path = '.cache/'
         path = path + self.transform_path(url)
 
+        if method == 'GET' and os.path.basename(path) == 'manifest.mpd':
+            c = shared_memory.SharedMemory(name='simpleProxyDownloader')
+            pid = int.from_bytes(c.buf, sys.byteorder)
+            if pid and psutil.pid_exists(pid):
+                pr = psutil.Process(pid)
+                pr.terminate()
+                pr.wait()
+            p = Process(target=start_download, args=(url, os.path.dirname(path)))
+            p.start()
+            c.buf[:] = p.pid.to_bytes(10, sys.byteorder)
+            c.close()
+
+            # Todo sane timeout
+            i = 0
+            maxTries = 25
+            while not os.path.isfile(path) and i < maxTries:
+                print('missing file')
+                time.sleep(1)
+                i = i + 1
+            # If we failed to download the mpd, stop the process
+            if i == maxTries:
+                p.terminate()
+                #p.wait()
         if os.path.isfile(path):
             self.path = path
             # Hack to log the request as local file
@@ -87,3 +128,4 @@ if __name__ == '__main__':
     httpd = socketserver.ForkingTCPServer(('', PORT), simpleProxy)
     print ("Now serving at", str(PORT))
     httpd.serve_forever()
+    c.unlink()

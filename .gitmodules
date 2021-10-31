@@ -1,0 +1,3 @@
+[submodule "dash-proxy"]
+	path = dashproxy
+	url = git@github.com:lukavia/dash-proxy.git
