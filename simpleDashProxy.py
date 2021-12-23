@@ -1,5 +1,5 @@
 #!/usr/bin/env -S python3 -u
-import os
+import os.path
 import sys
 import signal
 from multiprocessing import Process, shared_memory
@@ -7,11 +7,10 @@ import time
 import psutil
 
 import socketserver
-import http.server
 import urllib.request
 import urllib.error
-import urllib.parse
-import re
+
+from simpleProxy.simpleProxy import simpleProxy
 
 from dashproxy.dashproxy import DashProxy
 import logging
@@ -33,37 +32,8 @@ def start_download(url, output_dir):
     d = DashProxy(mpd=url, output_dir=output_dir, download=True, bandwidth_limit=4000000)
     d.run()
 
-class simpleDashProxy(http.server.SimpleHTTPRequestHandler):
+class simpleDashProxy(simpleProxy):
     server_version = "simpleDashProxy"
-    def do_GET(self):
-        res = self.do_request(method='GET')
-        if isinstance(res, http.client.HTTPResponse) and res.status == 200:
-            length = 64 * 1024
-            os.makedirs(os.path.dirname(res.cache_file), exist_ok=True)
-            f = open(res.cache_file, mode='wb')
-            while True:
-                buf = res.read(length)
-                if not buf:
-                    break
-                self.wfile.write(buf)
-                f.write(buf)
-            f.close()
-        else:
-            self.copyfile(res, self.wfile)
-
-    def do_HEAD(self):
-        self.do_request(method='HEAD')
-
-    def transform_path(self, url):
-        # Could be overwritten by implementation
-        parts = urllib.parse.urlsplit(url)
-
-        # just 2 level domain, no port
-        path = '.'.join(parts.netloc.split('.')[-2:]).split(':')[0]
-        # remove session/XXXXXX from path
-        path = path + re.sub(r'/session/[^/]*', '', parts.path)
-
-        return path
 
     def do_request(self, method='GET'):
         # remove the separator so it only leaves http....

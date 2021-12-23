@@ -1,3 +1,6 @@
 [submodule "dash-proxy"]
 	path = dashproxy
 	url = git@github.com:lukavia/dash-proxy.git
+[submodule "simpleProxy"]
+	path = simpleProxy
+	url = git@github.com:lukavia/simpleProxy.git
