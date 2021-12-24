@@ -2,7 +2,7 @@
 import os.path
 import sys
 import signal
-from multiprocessing import Process, shared_memory
+from multiprocessing import Process
 import time
 import psutil
 
@@ -26,14 +26,13 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 opener = urllib.request.build_opener(NoRedirect)
 urllib.request.install_opener(opener)
 
-c = shared_memory.SharedMemory(name='simpleDashProxyDownloader', create=True, size=10)
-
 def start_download(url, output_dir):
     d = DashProxy(mpd=url, output_dir=output_dir, download=True, bandwidth_limit=4000000)
     d.run()
 
 class simpleDashProxy(simpleProxy):
     server_version = "simpleDashProxy"
+    downloader_pid = '/dev/shm/simpleDashProxyDownloader.pid'
 
     def do_request(self, method='GET'):
         # remove the separator so it only leaves http....
@@ -43,16 +42,20 @@ class simpleDashProxy(simpleProxy):
         path = path + self.transform_path(url)
 
         if method == 'GET' and os.path.basename(path) == 'manifest.mpd':
-            c = shared_memory.SharedMemory(name='simpleDashProxyDownloader')
-            pid = int.from_bytes(c.buf, sys.byteorder)
+            pid = None
+            if os.path.exists(self.downloader_pid):
+                with open(self.downloader_pid) as f:
+                    pid = f.read()
+                    if pid:
+                        pid = int(pid)
             if pid and psutil.pid_exists(pid):
                 pr = psutil.Process(pid)
                 pr.terminate()
                 pr.wait()
             p = Process(target=start_download, args=(url, os.path.dirname(path)))
             p.start()
-            c.buf[:] = p.pid.to_bytes(10, sys.byteorder)
-            c.close()
+            with open(self.downloader_pid, 'w') as f:
+                f.write(str(p.pid))
 
             # Todo sane timeout
             i = 0
@@ -98,4 +101,3 @@ if __name__ == '__main__':
     httpd = socketserver.ForkingTCPServer(('', PORT), simpleDashProxy)
     print ("Now serving at", str(PORT))
     httpd.serve_forever()
-    c.unlink()
