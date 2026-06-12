@@ -41,7 +41,7 @@ class simpleDashProxy(simpleProxy):
         path = '.cache/'
         path = path + self.transform_path(url)
 
-        if method == 'GET' and os.path.basename(path) == 'manifest.mpd':
+        if method == 'GET' and os.path.basename(path) == 'manifest.mpd' and 'SD_Regular' not in path and 'HD_Premium' not in path:
             pid = None
             if os.path.exists(self.downloader_pid):
                 with open(self.downloader_pid) as f:
@@ -96,8 +96,9 @@ class simpleDashProxy(simpleProxy):
             return res
 
 if __name__ == '__main__':
-    PORT = 8088
+    PORT = 8880
 
+    socketserver.ForkingTCPServer.allow_reuse_address = True
     httpd = socketserver.ForkingTCPServer(('', PORT), simpleDashProxy)
     print ("Now serving at", str(PORT))
     httpd.serve_forever()
